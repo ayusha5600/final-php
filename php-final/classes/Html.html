@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Password Manager</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .container {
+            max-width: 400px;
+            margin: auto;
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 20px;
+        }
+        input[type="text"], input[type="password"] {
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        button {
+            padding: 10px;
+            margin-top: 10px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .message {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .message.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .message.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+    </style>
+</head>
+<body>
+
+<div id="container" class="container">
+    <h2>Sign in/up</h2>
+    <form id="user-form">
+        <input type="text" id="username" placeholder="Username" required>
+        <input type="password" id="password" placeholder="Password" required>
+        <div>
+            <button type="button" onclick="signup()">Signup</button>
+            <button type="button" onclick="login()">Login</button>
+            <button type="button" onclick="changepass()">Change Password</button>
+        </div>
+    </form>
+    <div id="message" class="message"></div>
+</div>
+
+<div id="passcontainer" class="passcontainer" style="display: none;">
+    <h2>Password Manager</h2>
+    <form id="password-form">
+        <input type="text" id="passwordtitle" placeholder="Password Title" required>
+        <div>
+            <input type="text" id="passwordtxt" placeholder="Password" required>
+            <button type="button" onclick="generatePassword()">Generate</button>
+        </div>
+        <div>
+            <button type="button" onclick="SavePassword('Save')">SavePassword</button>
+            <button type="button" onclick="SavePassword('Update')">UpdatePassword</button>
+            <button type="button" onclick="SavePassword('Delete')">DeletePassword</button>
+            <button type="button" onclick="GetPasswords()">GetPasswords</button>
+        </div>
+    </form>
+    <div id="passwordmessage" class="passwordmessage"></div>
+
+    <div id="passwordgen" style="display: none;">
+        <label for="length">Password Length:</label>
+        <input type="number" id="length" name="length" value="10"><br>
+        
+        <input type="number" id="lowAlpB" name="lowAlpB" checked>
+        <label for="lowAlpB">Include Lowercase Letters</label><br>
+        
+        <input type="number" id="upAlpB" name="upAlpB" checked>
+        <label for="upAlpB">Include Uppercase Letters</label><br>
+        
+        <input type="number" id="numB" name="numB" checked>
+        <label for="numB">Include Numbers</label><br>
+        
+        <input type="number" id="symbolB" name="symbolB" checked>
+        <label for="symbolB">Include Symbols</label><br>
+        
+        <button onclick="generatePassword()">Generate Password</button>
+    </div>
+
+    <div id="passwords" class="passwords"></div>
+</div>
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+<script>
+
+function changepass(){
+    const username = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
+    var passwordnew = prompt("Enter the new pasword");
+
+    fetch('ChagePas.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ Username: username, Password: password, PasswordNew: passwordnew})
+    })
+    .then(response => response.json())
+    .then(data => {
+        const messageDiv = document.getElementById('message');
+        if (data.error) {
+            messageDiv.textContent = data.error;
+            messageDiv.className = 'message error';
+        } else {
+            messageDiv.textContent = data.message;
+            messageDiv.className = 'message success';
+        }
+    })
+    .catch(error => {
+        const messageDiv = document.getElementById('message');
+        messageDiv.textContent = 'An error occurred';
+        messageDiv.className = 'message error';
+        console.error('Error:', error);
+    });
+}
+
+function generatePassword() {
+
+    if(document.getElementById("passwordgen").style.display=="block"){
+
+    
+
+            var xhr = new XMLHttpRequest();
+            xhr.open("POST", "passgen.php", true);
+            xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+
+            var params = "lowAlpB=" + document.getElementById("lowAlpB").value +
+                         "&upAlpB=" + document.getElementById("upAlpB").value +
+                         "&numB=" + document.getElementById("numB").value +
+                         "&symbolB=" + document.getElementById("symbolB").value +
+                         "&length=" + document.getElementById("length").value;
+
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState == 4 && xhr.status == 200) {
+                    var response = JSON.parse(xhr.responseText);
+                    document.getElementById("passwordtxt").value = response.password;
+                }
+            };
+
+            xhr.send(params);
+            document.getElementById("passwordgen").style.display="none";
+    }else{
+        document.getElementById("passwordgen").style.display="block"
+    }
+}
+
+function GetPasswords() {
+            var username = document.getElementById("username").value;
+            var password = document.getElementById("password").value;
+            var xhr = new XMLHttpRequest();
+            xhr.open("POST", "GetPass.php", true);
+            xhr.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4 && xhr.status === 200) {
+                    var response = JSON.parse(xhr.responseText);
+                    if (response.error) {
+                        alert(response.error);
+                    } else {
+                        var passwords = document.getElementById("passwords");
+                        passwords.innerHTML = "<h2>Passwords</h2>";
+                        response.forEach(function(item) {
+                            passwords.innerHTML += "<p><strong>Title:</strong> " + item.PassTitle + "<br><strong>Password:</strong> " + item.Password + "</p>";
+                        });
+                    }
+                }
+            };
+            xhr.send(JSON.stringify({Username: username, UserPassword: password}));
+        }
+
+function SavePassword(action){
+    const username = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
+    const passtitle = document.getElementById('passwordtitle').value;
+    const passwordtext = document.getElementById('passwordtxt').value;
+
+    var data = {
+        "Username": username,
+        "UserPassword": password,
+        "PassTitle": passtitle,
+        "Password": passwordtext,
+        "Action": action
+    };
+
+    $.ajax({
+        type: "POST",
+        url: "SavePass.php",
+        data: JSON.stringify(data),
+        success: function(response) {
+            document.getElementById("passwordmessage").innerText=response.message;
+        },
+        error: function(xhr, status, error) {
+            document.getElementById("passwordmessage").innerText="An error occurred: " + xhr.responseText;
+        },
+        dataType: "json",
+        contentType: "application/json"
+    });
+}
+
+function signup() {
+    const username = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
+
+    fetch('Signup.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ Username: username, Password: password })
+    })
+    .then(response => response.json())
+    .then(data => {
+        const messageDiv = document.getElementById('message');
+        if (data.error) {
+            messageDiv.textContent = data.error;
+            messageDiv.className = 'message error';
+        } else {
+            messageDiv.textContent = data.message;
+            messageDiv.className = 'message success';
+        }
+    })
+    .catch(error => {
+        const messageDiv = document.getElementById('message');
+        messageDiv.textContent = 'An error occurred';
+        messageDiv.className = 'message error';
+        console.error('Error:', error);
+    });
+}
+
+function login() {
+    const username = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
+
+    fetch('login.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ Username: username, Password: password })
+    })
+    .then(response => response.json())
+    .then(data => {
+        const messageDiv = document.getElementById('message');
+        if (data.error) {
+            messageDiv.textContent = data.error;
+            messageDiv.className = 'message error';
+        } else {
+            messageDiv.textContent = data.message;
+            messageDiv.className = 'message success';
+            document.getElementById("container").style.display = "none";
+            document.getElementById("passcontainer").style.display = "block";
+        }
+    })
+    .catch(error => {
+        const messageDiv = document.getElementById('message');
+        messageDiv.textContent = 'An error occurred';
+        messageDiv.className = 'message error';
+        console.error('Error:', error);
+    });
+}
+</script>
+
+</body>
+</html>
