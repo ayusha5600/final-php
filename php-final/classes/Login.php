@@ -4,7 +4,6 @@ $username = "root";
 $password = "";
 $database = "Book";
 
-// Connect to the database
 $conn = mysqli_connect($hostname, $username, $password, $database);
 
 // Check connection
@@ -12,80 +11,46 @@ if (!$conn) {
     die("Connection failed: " . mysqli_connect_error());
 }
 
-// Set content type to JSON
+// Set proper content type for JSON response
 header('Content-Type: application/json; charset=utf-8');
 
-// Function to decrypt saved passwords
-function Decrypt($data, $key) {
-    $iv = substr(hash('sha256', $key), 0, 16); // Use the first 16 bytes of the key as IV
-    return openssl_decrypt($data, 'AES-256-CBC', $key, 0, $iv);
-}
-
 try {
-    // Handle both JSON and form POST requests
-    if (isset($_SERVER['CONTENT_TYPE']) && strpos($_SERVER['CONTENT_TYPE'], 'application/json') !== false) {
-        $data = json_decode(file_get_contents("php://input"), true);
-        $username = isset($data['Username']) ? $data['Username'] : '';
-        $user_password = isset($data['UserPassword']) ? $data['UserPassword'] : '';
-    } else {
-        $username = isset($_POST['Username']) ? $_POST['Username'] : '';
-        $user_password = isset($_POST['UserPassword']) ? $_POST['UserPassword'] : '';
-    }
+    $data = json_decode(file_get_contents("php://input"), true);
 
-    // Sanitize inputs
-    $username = mysqli_real_escape_string($conn, $username);
-    $user_password = mysqli_real_escape_string($conn, $user_password);
+    $field1 = mysqli_real_escape_string($conn, $data['Username']);
+    $field2 = mysqli_real_escape_string($conn, $data['Password']);
 
-    // Check if the user exists
-    $query = "SELECT ID, Password FROM Users WHERE Username = ?";
+    $query = "SELECT * FROM Users WHERE Username = ?";
     $stmt = $conn->prepare($query);
-    $stmt->bind_param("s", $username);
+    $stmt->bind_param("s", $field1);
     $stmt->execute();
     $result = $stmt->get_result();
 
-    // If no user found
-    if ($result->num_rows != 1) {
-        echo json_encode(array("error" => "Login Attempt Failed"));
-        exit;
+    $hashed_password = "";
+    $userid = 0;
+
+    if ($result->num_rows == 1) {
+        $row = $result->fetch_assoc();
+        $hashed_password = $row['Password'];
+        $userid = $row['ID'];
     }
 
-    $row = $result->fetch_assoc();
-    $userid = $row['ID'];
-    $hashed_password = $row['Password'];
-
-    // Check password match
-    if (!password_verify($user_password, $hashed_password)) {
-        echo json_encode(array("error" => "Login Attempt Failed"));
-        exit;
-    }
-
-    // Get all saved passwords for this user
-    $query = "SELECT PassTitle, Pass FROM passwords WHERE UserID = ?";
-    $stmt = $conn->prepare($query);
-    $stmt->bind_param("i", $userid);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $data = array();
-
-    while ($row = $result->fetch_assoc()) {
-        $passTitle = $row["PassTitle"];
-        $encrypted_pass = $row["Pass"];
-        $decrypted_pass = Decrypt($encrypted_pass, $user_password);
-        $data[] = array(
-            "PassTitle" => $passTitle,
-            "Password" => $decrypted_pass
+    if (!empty($hashed_password) && password_verify($field2, $hashed_password)) {
+        $response = array(
+            "message" => "Logged in successfully",
+            "detail" => $userid
         );
+        echo json_encode($response);
+    } else {
+        $response = array("error" => "Login Attempt Failed");
+        echo json_encode($response);
     }
-
-    echo json_encode($data);
 
 } catch (Exception $e) {
-    echo json_encode(array(
-        "error" => "Exception occurred",
-        "message" => $e->getMessage()
-    ));
+    $response = array("error" => "Exception occurred", "message" => $e->getMessage());
+    echo json_encode($response);
 }
 
-// Close connection
+// Close the database connection
 mysqli_close($conn);
 ?>
