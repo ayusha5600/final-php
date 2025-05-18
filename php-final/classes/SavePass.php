@@ -1,112 +1,132 @@
 <?php
-$host = "localhost";
-$dbUser = "root";
-$dbPass = "";
-$dbName = "book";
+$hostname = "localhost";
+$username = "root";
+$password = "";
+$database = "book";
 
-// Connect to MySQL
-$conn = new mysqli($host, $dbUser, $dbPass, $dbName);
+$conn = mysqli_connect($hostname, $username, $password, $database);
 
 // Check connection
-if ($conn->connect_error) {
-    die(json_encode(["error" => "Database Connection Failed"]));
+if (!$conn) {
+    die("Connection failed: " . mysqli_connect_error());
 }
 
-header('Content-Type: application/json');
+// Set proper content type for JSON response
+header('Content-Type: application/json; charset=utf-8');
 
 try {
-    $input = json_decode(file_get_contents("php://input"), true);
+    $data = json_decode(file_get_contents("php://input"), true);
 
-    $username = $conn->real_escape_string($input['Username']);
-    $userPassword = $conn->real_escape_string($input['UserPassword']);
+    $username = mysqli_real_escape_string($conn, $data['Username']);
+    $user_password = mysqli_real_escape_string($conn, $data['UserPassword']);
 
-    // Authenticate User
-    $stmt = $conn->prepare("SELECT ID, Password FROM users WHERE Username = ?");
+    // Verify user login
+    $query = "SELECT ID, Password FROM users WHERE Username = ?";
+    $stmt = $conn->prepare($query);
     $stmt->bind_param("s", $username);
     $stmt->execute();
     $result = $stmt->get_result();
 
-    if ($result->num_rows !== 1) {
-        echo json_encode(["error" => "Username not found"]);
+    if ($result->num_rows != 1) {
+        echo json_encode(array("error" => "Invalid Username"));
         exit;
     }
 
-    $user = $result->fetch_assoc();
-    $userId = $user['ID'];
+    $row = $result->fetch_assoc();
+    $userid = $row['ID'];
+    $hashed_password = $row['Password'];
 
-    if (!password_verify($userPassword, $user['Password'])) {
-        echo json_encode(["error" => "Incorrect password"]);
+    if (!password_verify($user_password, $hashed_password)) {
+        echo json_encode(array("error" => "Invalid Password"));
         exit;
     }
 
-    $action = $input['Action'] ?? '';
-
+    // Determine action: save, update, or delete
+    $action = isset($data['Action']) ? $data['Action'] : '';
     switch ($action) {
         case 'Save':
-            handleSave($conn, $input, $userId);
+            savePassword($conn, $data, $userid);
             break;
         case 'Update':
-            handleUpdate($conn, $input, $userId);
+            updatePassword($conn, $data, $userid);
             break;
         case 'Delete':
-            handleDelete($conn, $input, $userId);
+            deletePassword($conn, $data, $userid);
             break;
         default:
-            echo json_encode(["error" => "Unknown action"]);
+            echo json_encode(array("error" => "Invalid Action"));
+            break;
     }
 
 } catch (Exception $e) {
-    echo json_encode(["error" => "Server error", "message" => $e->getMessage()]);
+    $response = array("error" => "Exception occurred", "message" => $e->getMessage());
+    echo json_encode($response);
 }
 
-$conn->close();
+// Close the database connection
+mysqli_close($conn);
 
-// Function to save password
-function handleSave($conn, $data, $userId) {
-    $title = $conn->real_escape_string($data['PassTitle']);
-    $password = $conn->real_escape_string($data['Password']);
-    $encrypted = encryptPassword($password, $data['UserPassword']);
+function savePassword($conn, $data, $userid) {
+    $pass_title = mysqli_real_escape_string($conn, $data['PassTitle']);
+    $password = mysqli_real_escape_string($conn, $data['Password']);
 
-    $stmt = $conn->prepare("INSERT INTO passwords (UserID, PassTitle, Pass) VALUES (?, ?, ?)");
-    $stmt->bind_param("iss", $userId, $title, $encrypted);
-    $stmt->execute();
+    // Encrypt the password
+    $encrypted_pass = Encrypt($password, $data['UserPassword']);
 
-    echo json_encode($stmt->affected_rows > 0
-        ? ["message" => "Password saved"]
-        : ["error" => "Save failed"]);
+    // Insert new password into the database
+    $query = "INSERT INTO passwords (UserID, PassTitle, Pass) VALUES (?, ?, ?)";
+    $stmt = $conn->prepare($query);
+    $stmt->bind_param("iss", $userid, $pass_title, $encrypted_pass);
+    $result = $stmt->execute();
+
+    if ($result) {
+        $response = array("message" => "Password saved successfully");
+    } else {
+        $response = array("error" => "Failed to save password");
+    }
+    echo json_encode($response);
 }
 
-// Function to update password
-function handleUpdate($conn, $data, $userId) {
-    $title = $conn->real_escape_string($data['PassTitle']);
-    $password = $conn->real_escape_string($data['Password']);
-    $encrypted = encryptPassword($password, $data['UserPassword']);
+function updatePassword($conn, $data, $userid) {
+    $pass_title = mysqli_real_escape_string($conn, $data['PassTitle']);
+    $password = mysqli_real_escape_string($conn, $data['Password']);
 
-    $stmt = $conn->prepare("UPDATE passwords SET Pass = ? WHERE UserID = ? AND PassTitle = ?");
-    $stmt->bind_param("sis", $encrypted, $userId, $title);
-    $stmt->execute();
+    // Encrypt the new password
+    $encrypted_pass = Encrypt($password, $data['UserPassword']);
 
-    echo json_encode($stmt->affected_rows > 0
-        ? ["message" => "Password updated"]
-        : ["error" => "Update failed"]);
+    // Update password in the database
+    $query = "UPDATE passwords SET Pass = ? WHERE UserID = ? AND PassTitle = ?";
+    $stmt = $conn->prepare($query);
+    $stmt->bind_param("sis", $encrypted_pass, $userid, $pass_title);
+    $result = $stmt->execute();
+
+    if ($result) {
+        $response = array("message" => "Password updated successfully");
+    } else {
+        $response = array("error" => "Failed to update password");
+    }
+    echo json_encode($response);
 }
 
-// Function to delete password
-function handleDelete($conn, $data, $userId) {
-    $title = $conn->real_escape_string($data['PassTitle']);
+function deletePassword($conn, $data, $userid) {
+    $pass_title = mysqli_real_escape_string($conn, $data['PassTitle']);
 
-    $stmt = $conn->prepare("DELETE FROM passwords WHERE UserID = ? AND PassTitle = ?");
-    $stmt->bind_param("is", $userId, $title);
-    $stmt->execute();
+    // Delete password from the database
+    $query = "DELETE FROM passwords WHERE UserID = ? AND PassTitle = ?";
+    $stmt = $conn->prepare($query);
+    $stmt->bind_param("is", $userid, $pass_title);
+    $result = $stmt->execute();
 
-    echo json_encode($stmt->affected_rows > 0
-        ? ["message" => "Password deleted"]
-        : ["error" => "Delete failed"]);
+    if ($result) {
+        $response = array("message" => "Password deleted successfully");
+    } else {
+        $response = array("error" => "Failed to delete password");
+    }
+    echo json_encode($response);
 }
 
-// Encryption logic
-function encryptPassword($data, $key) {
-    $iv = substr(hash('sha256', $key), 0, 16);
+function Encrypt($data, $key) {
+    $iv = substr(hash('sha256', $key), 0, 16); // Use the first 16 bytes of the key as the IV
     return openssl_encrypt($data, 'AES-256-CBC', $key, 0, $iv);
 }
 ?>
