@@ -29,6 +29,6 @@ This is a PHP-based web application that handles user authentication and passwor
 
 ## Setup Instructions
 
-1. Import `book.sql` into your MySQL database.
-2. Place the project files in your server root directory (e.g., `htdocs` for XAMPP).
-3. Access the project via your browser at `http://localhost/`.
+1. Importing `book.sql` into MySQL database.
+2. Placeing the project files in server root directory (`htdocs` for XAMPP).
+3. Accessing the project via  browser.
